@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph , END
 from app.agents.memory_agent import store_user_fact
-
+from app.agents.memory_agent import MemoryManager
 
 # 1. load the API Key
 
@@ -28,9 +28,23 @@ llm_with_tools = llm.bind_tools(tools)
 def call_model(state: AgentState):
     print("--AI IS THINKING--")
     messages = state['messages']
+    # 1. fetch memories from the database
+    memory_manager = MemoryManager()
+    past_memories = memory_manager.get_memories_string()
+
+    # 2. create a "System Message" to give the AI context
+    system_message = {
+        "role": "system",
+        "content": f"You are MOMI, a helpful AI assistant."
+        f"Here is what you remember about the user:\n{past_memories}"
+    }
+
+    # 3 . put the system message at the VERY START of the conversation
+    # we don't save this to the state,we just 'inject' it into this specific call
+    full_message = [system_message] + messages
 
     #Ask the LLM for a response
-    response = llm_with_tools.invoke(messages)
+    response = llm_with_tools.invoke(full_message)
 
     #Return the updated state
     return{"messages":[response]}
@@ -47,8 +61,8 @@ def handle_tools(state:AgentState):
         result = store_user_fact.invoke(tool_call['args'])
 
         #return a 'system' message so the AI knows the save was successful
-        return {"message":[{"role":"system","content":f"Memory stored:{result}"}]}
-    return {"message":[]}#No tool called
+        return {"messages":[{"role":"system","content":f"Memory stored:{result}"}]}
+    return {"messages":[]}#No tool called
 
 # 5. Conditional Logic: Should we continue or stop?
 def should_continue(state:AgentState):
@@ -78,14 +92,21 @@ momi_app = workflow.compile()
 # TEST
 if __name__== "__main__":
     print("MOMI Agent is running..")
-    user_input = "My name is Kavindya and I am a software engineer."
+    user_input = "Do you remember my name and what I do?"
     inputs = {"messages": [{"role": "user","content":user_input}]}
     for output in momi_app.stream(inputs):
         for key, value in output.items():
             if "messages" in value and value["messages"]:
-                last_msg = value["message"][-1]
+                last_msg = value["messages"][-1]
                 #only print if it's a text response(assistant role)
-                if hasattr(last_msg,'content')and last_msg.content:
+                if hasattr(last_msg,'content'):
+                    if isinstance(last_msg.content,list):
+                        #extract text from structured response
+                        text_parts = [item["text"] for item in last_msg.content if item["type"]=="text"]
+                        print(f"\n[{key}]:{' '.join(text_parts)}")
+                    else:
+                        printf(f"\n[{key}]:{last_msg.content}")
+                    
                     print(f"\n[{key}]:{last_msg.content}")
            
 

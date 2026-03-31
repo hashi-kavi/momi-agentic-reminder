@@ -33,12 +33,20 @@ class MemoryManager:
         #Return as a simple list of  strings
         return [row[0] for row in rows]
     
-    @tool # this converts function into a callable capabiltiy for the llm
-    def store_user_fact(fact:str):# here fact -> input from the AI
+    def get_memories_string(self):
+          #fetch all memories and turn them into a single block of text
+          memories = self.get_all_memories()
+          if not memories:
+                return "No past memories found."
+          #format:"-fact 1 \n - fact 2"
+          return "\n".join([f"-{m}" for m in memories])
+
+
+    
+@tool # this converts function into a callable capabiltiy for the llm
+def store_user_fact(fact:str):# here fact -> input from the AI
                 """
                 Use this tool when the user tells you something personal about themselves that you should remember for the future(e.g.,their name,job,likes,or plans.)
                 """
                 manager = MemoryManager()#Creates an instance of memory system
                 return manager.save_fact(fact)
-
-
